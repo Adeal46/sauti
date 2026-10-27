@@ -1,0 +1,110 @@
+# XcodeGen spec. The GitHub Actions workflow runs `xcodegen generate` to create
+# Sauti.xcodeproj, so the project file itself never needs to be committed.
+name: Sauti
+
+options:
+  bundleIdPrefix: com.adeal
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+packages:
+  sherpa-onnx:
+    url: https://github.com/k2-fsa/sherpa-onnx
+    exactVersion: 2.0.1
+
+targets:
+  Sauti:
+    type: application
+    platform: iOS
+    sources:
+      - path: App/Sources
+      - path: Shared
+      - path: App/Assets.xcassets
+      - path: App/Resources/Readability.js
+        buildPhase: resources
+      # Downloaded by scripts/fetch-models.sh (not committed: ~145 MB).
+      - path: App/Resources/KokoroModel
+        type: folder
+        buildPhase: resources
+        optional: true
+    dependencies:
+      - package: sherpa-onnx
+        product: sherpa-onnx
+      - target: SautiShare
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Sauti
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSupportsIndirectInputEvents: true
+        NSCameraUsageDescription: Sauti uses the camera to scan printed pages so it can read them aloud.
+        LSSupportsOpeningDocumentsInPlace: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: PDF Document
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+          - CFBundleTypeName: Text Document
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.plain-text, public.rtf]
+    entitlements:
+      path: App/Sauti.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.adeal.sauti]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adeal.sauti
+        PRODUCT_NAME: Sauti
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+  SautiShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension/Sources
+      - path: Shared
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Sauti
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+    entitlements:
+      path: ShareExtension/SautiShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.adeal.sauti]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adeal.sauti.share
+        APPLICATION_EXTENSION_API_ONLY: YES
+
+schemes:
+  Sauti:
+    build:
+      targets:
+        Sauti: all
+    run:
+      config: Debug
+    archive:
+      config: Release

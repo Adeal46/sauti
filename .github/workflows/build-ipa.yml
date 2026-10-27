@@ -1,0 +1,87 @@
+name: Build IPA
+
+# Builds an unsigned Sauti.ipa on a GitHub-hosted Mac. Download it from the run's
+# "Artifacts" section and install it with Sideloadly (see README).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # If GitHub retires this image, change it to macos-latest.
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Cache voice model
+        uses: actions/cache@v4
+        with:
+          path: App/Resources/KokoroModel
+          key: kokoro-int8-en-v0_19-lexicon-v1
+
+      - name: Download voice model
+        run: bash scripts/fetch-models.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Sauti.xcodeproj \
+            -scheme Sauti \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
+          test -d build/Build/Products/Release-iphoneos/Sauti.app
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Release-iphoneos/Sauti.app"
+          # Ad-hoc signatures carry the app-group entitlement through to Sideloadly.
+          if [ -d "$APP/PlugIns/SautiShare.appex" ]; then
+            codesign --force --sign - --entitlements ShareExtension/SautiShare.entitlements "$APP/PlugIns/SautiShare.appex"
+          fi
+          codesign --force --sign - --entitlements App/Sauti.entitlements "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry Sauti.ipa Payload
+          ls -lh Sauti.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sauti-ipa
+          path: Sauti.ipa
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 7
