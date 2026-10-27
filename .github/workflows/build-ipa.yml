@@ -68,25 +68,32 @@ jobs:
           MODEL=$(ls "$APP/KokoroModel" 2>/dev/null | tr '\n' ' ')
           echo "::notice::Build OK on $(xcodebuild -version | head -1). App binary ${BIN}, share extension: ${APPEX}, voice files: ${MODEL}"
 
-      - name: Package IPA
+      - name: Package IPAs
         run: |
           set -euo pipefail
           APP="build/Build/Products/Release-iphoneos/Sauti.app"
-          # Ad-hoc signatures carry the app-group entitlement through to Sideloadly.
+          # Plain ad-hoc signatures with no entitlements, so free Apple IDs can sign it
+          # (no app group needed; the share extension falls back to the clipboard).
           if [ -d "$APP/PlugIns/SautiShare.appex" ]; then
-            codesign --force --sign - --entitlements ShareExtension/SautiShare.entitlements "$APP/PlugIns/SautiShare.appex"
+            codesign --force --sign - "$APP/PlugIns/SautiShare.appex"
           fi
-          codesign --force --sign - --entitlements App/Sauti.entitlements "$APP"
+          codesign --force --sign - "$APP"
           mkdir -p Payload
           cp -R "$APP" Payload/
           zip -qry Sauti.ipa Payload
-          ls -lh Sauti.ipa
+          # Simplest variant: no share extension (needs only one App ID).
+          rm -rf Payload/Sauti.app/PlugIns
+          codesign --force --sign - Payload/Sauti.app
+          zip -qry Sauti-no-extension.ipa Payload
+          ls -lh *.ipa
 
-      - name: Upload IPA
+      - name: Upload IPAs
         uses: actions/upload-artifact@v4
         with:
           name: Sauti-ipa
-          path: Sauti.ipa
+          path: |
+            Sauti.ipa
+            Sauti-no-extension.ipa
           retention-days: 14
 
       - name: Upload build log
