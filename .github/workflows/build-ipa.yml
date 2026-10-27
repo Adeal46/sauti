@@ -53,8 +53,20 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee build.log | grep -E "error:|warning: .*deprecated|BUILD (SUCCEEDED|FAILED)" || true
-          test -d build/Build/Products/Release-iphoneos/Sauti.app
+            build > build.log 2>&1 || true
+          # Surface results as annotations (visible on the run page without opening logs).
+          grep -E "^/.*: error: " build.log | sort -u | head -20 | while IFS= read -r line; do
+            echo "::error::${line#*/sauti/}"
+          done
+          APP="build/Build/Products/Release-iphoneos/Sauti.app"
+          if ! grep -q "BUILD SUCCEEDED" build.log || [ ! -f "$APP/Sauti" ]; then
+            echo "::error::Build failed — see the build-log artifact."
+            exit 1
+          fi
+          BIN=$(du -h "$APP/Sauti" | cut -f1)
+          APPEX=$([ -f "$APP/PlugIns/SautiShare.appex/SautiShare" ] && echo yes || echo no)
+          MODEL=$(ls "$APP/KokoroModel" 2>/dev/null | tr '\n' ' ')
+          echo "::notice::Build OK on $(xcodebuild -version | head -1). App binary ${BIN}, share extension: ${APPEX}, voice files: ${MODEL}"
 
       - name: Package IPA
         run: |
