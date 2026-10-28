@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: App/Resources/KokoroModel
-          key: kokoro-int8-en-v0_19-lexicon-v1
+          key: kokoro-multi-lang-v1_0-fp32-v1
 
       - name: Download voice model
         run: bash scripts/fetch-models.sh

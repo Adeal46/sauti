@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 struct SettingsView: View {
@@ -5,6 +6,8 @@ struct SettingsView: View {
     @AppStorage("readerFontSize") private var fontSize: Double = 19
     @AppStorage("listenerName") private var listenerName = ""
     @AppStorage("appearance") private var appearance = "night"
+    @State private var appleVoices: [VoiceOption] = VoiceCatalog.appleVoices()
+    @State private var personalVoiceStatus = AVSpeechSynthesizer.personalVoiceAuthorizationStatus
 
     var body: some View {
         Form {
@@ -37,19 +40,45 @@ struct SettingsView: View {
             }
 
             Section {
-                ForEach(VoiceCatalog.neural) { voice in
+                ForEach(VoiceCatalog.premium) { voice in
                     voiceRow(voice)
                 }
             } header: {
-                Text("Neural voices")
+                Text("Premium voices")
             } footer: {
                 Text(KokoroEngine.isModelBundled
-                     ? "Kokoro voices run entirely on this iPhone. The first sentence after launch takes a few seconds while the voice wakes up."
-                     : "The neural voice model isn't included in this build, so the iPhone voice is used instead.")
+                     ? "Full-quality Kokoro voices, generated entirely on this iPhone. The first sentence takes a few seconds while the voice wakes up."
+                     : "The voice model isn't included in this build, so an iPhone voice is used instead.")
             }
 
-            Section("Other") {
-                voiceRow(VoiceCatalog.system)
+            Section {
+                DisclosureGroup("More voices (\(VoiceCatalog.standard.count))") {
+                    ForEach(VoiceCatalog.standard) { voice in
+                        voiceRow(voice)
+                    }
+                }
+            }
+
+            Section {
+                ForEach(appleVoices) { voice in
+                    voiceRow(voice)
+                }
+                if personalVoiceStatus != .authorized {
+                    Button {
+                        AVSpeechSynthesizer.requestPersonalVoiceAuthorization { status in
+                            DispatchQueue.main.async {
+                                personalVoiceStatus = status
+                                appleVoices = VoiceCatalog.appleVoices()
+                            }
+                        }
+                    } label: {
+                        Label("Use my Personal Voice", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                }
+            } header: {
+                Text("iPhone voices")
+            } footer: {
+                Text("For Apple's best voices, open iPhone Settings → Accessibility → Spoken Content → Voices → English and download a \"Premium\" voice (for example Ava, Zoe or Evan). To read in your own voice, set up Personal Voice under Accessibility first. New voices appear here automatically.")
             }
 
             Section("Reading") {
@@ -72,7 +101,7 @@ struct SettingsView: View {
 
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")
-                LabeledContent("Voice engine", value: "Kokoro-82M · sherpa-onnx")
+                LabeledContent("Voice engine", value: "Kokoro-82M v1.0 · sherpa-onnx")
                 LabeledContent("Text recognition", value: "Apple Vision")
                 LabeledContent("Article extraction", value: "Mozilla Readability")
             }
@@ -80,6 +109,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(ScreenBackground())
         .navigationTitle("Settings")
+        .onAppear { appleVoices = VoiceCatalog.appleVoices() }
     }
 
     private func voiceRow(_ voice: VoiceOption) -> some View {

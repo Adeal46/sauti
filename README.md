@@ -6,7 +6,7 @@ recognition and article extraction all run on the phone.
 
 | Feature | How it works |
 |---|---|
-| Neural voices (11) | Kokoro-82M (int8) via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), bundled in the app |
+| Neural voices (27) | Kokoro-82M v1.0 (full precision) via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), bundled in the app |
 | PDFs | PDFKit text, with OCR for scanned pages that have no text layer |
 | Camera scans | VisionKit document scanner + Apple Vision text recognition |
 | Web articles | Downloaded once, cleaned with Mozilla Readability, then read offline |
@@ -27,7 +27,7 @@ GitHub builds the app for you on a cloud Mac.
 3. **Wait for the build.** Open the **Actions** tab. "Build IPA" starts automatically
    and takes about 10–15 minutes the first time.
 4. **Download the app.** Open the finished run and download **WolfCompanion-ipa** from the
-   Artifacts section. Unzip it to get `WolfCompanion.ipa` (about 105 MB, mostly the voice). `WolfCompanion-no-extension.ipa` is the same app without Share → Wolf Companion, for signing tools that reject extensions.
+   Artifacts section. Unzip it to get `WolfCompanion.ipa` (about 330 MB, mostly the voice). `WolfCompanion-no-extension.ipa` is the same app without Share → Wolf Companion, for signing tools that reject extensions.
 
 If the build fails, download **build-log** from the same run and share the lines
 containing `error:`.

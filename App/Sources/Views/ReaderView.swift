@@ -222,16 +222,39 @@ struct PlayerControls: View {
     private var voiceMenu: some View {
         Menu {
             Picker("Voice", selection: $player.voiceID) {
-                ForEach(VoiceCatalog.all) { voice in
-                    Text("\(voice.name) — \(voice.detail)").tag(voice.id)
+                Section("Premium") {
+                    ForEach(VoiceCatalog.premium) { voice in
+                        voiceLabel(voice).tag(voice.id)
+                    }
+                }
+                Section("iPhone voices") {
+                    ForEach(VoiceCatalog.appleVoices()) { voice in
+                        voiceLabel(voice).tag(voice.id)
+                    }
+                }
+            }
+            Menu("More voices") {
+                Picker("More voices", selection: $player.voiceID) {
+                    ForEach(VoiceCatalog.standard) { voice in
+                        voiceLabel(voice).tag(voice.id)
+                    }
                 }
             }
         } label: {
             VStack(spacing: 2) {
                 Image(systemName: "person.wave.2.fill").font(.body)
-                Text(VoiceCatalog.option(for: player.voiceID).name).font(.caption2)
+                Text(VoiceCatalog.option(for: player.voiceID).name)
+                    .font(.caption2)
+                    .lineLimit(1)
             }
             .frame(width: 64)
+        }
+    }
+
+    private func voiceLabel(_ voice: VoiceOption) -> some View {
+        VStack(alignment: .leading) {
+            Text(voice.name)
+            Text(voice.detail)
         }
     }
 

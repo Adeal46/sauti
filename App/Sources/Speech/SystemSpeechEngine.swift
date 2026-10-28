@@ -1,23 +1,29 @@
 import AVFoundation
 
-/// Fallback voice using Apple's built-in synthesizer, rendered to samples so it goes
-/// through the same player (speed control, highlighting) as the neural voice.
+/// Apple voices (including Premium, Enhanced and Personal Voice), rendered to samples
+/// so they go through the same player (speed control, highlighting) as Kokoro.
 final class SystemSpeechEngine: SpeechEngine {
     let sampleRate: Double = 24_000
+    let maxNativeSpeed: Float = 1.0
 
     private let synthesizer = AVSpeechSynthesizer()
-    private let voice: AVSpeechSynthesisVoice?
+    private let fallbackVoice: AVSpeechSynthesisVoice?
 
     init() {
         let english = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("en") }
         let preferred = english.filter { $0.language == "en-US" || $0.language == "en-GB" }
         let pool = preferred.isEmpty ? english : preferred
-        voice = pool.max { $0.quality.rawValue < $1.quality.rawValue } ?? AVSpeechSynthesisVoice(language: "en-US")
+        fallbackVoice = pool.max { $0.quality.rawValue < $1.quality.rawValue } ?? AVSpeechSynthesisVoice(language: "en-US")
     }
 
-    func synthesize(_ text: String, voice _: Int) -> [Float] {
+    func synthesize(_ text: String, voice option: VoiceOption, speed _: Float) -> [Float] {
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = voice
+        if case .apple(let identifier) = option.source, !identifier.isEmpty,
+           let chosen = AVSpeechSynthesisVoice(identifier: identifier) {
+            utterance.voice = chosen
+        } else {
+            utterance.voice = fallbackVoice
+        }
 
         let lock = NSLock()
         let done = DispatchSemaphore(value: 0)
