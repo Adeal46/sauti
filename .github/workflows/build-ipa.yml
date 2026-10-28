@@ -29,12 +29,7 @@ jobs:
       - name: Download voice model
         run: |
           rm -rf App/Resources/KokoroModel
-          set +e
-          bash -x scripts/fetch-models.sh > fetch.log 2>&1
-          status=$?
-          set -e
-          grep -v '%' fetch.log | tail -7 | while IFS= read -r line; do echo "::notice::fetch: $line"; done
-          echo "::notice::fetch exit status $status"
+          bash scripts/fetch-models.sh
           echo "::notice::Voice model folder: $(ls App/Resources/KokoroModel | tr '\n' ' ') ($(du -sh App/Resources/KokoroModel | cut -f1))"
           test -f App/Resources/KokoroModel/model.onnx
 

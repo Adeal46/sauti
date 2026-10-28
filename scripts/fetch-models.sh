@@ -8,7 +8,7 @@ BASE="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models"
 PKG="kokoro-multi-lang-v1_0"
 
 if [ -f "$DEST/model.onnx" ] && [ -f "$DEST/lexicon-gb-en.txt" ]; then
-  echo "Kokoro v1.0 model already present in $DEST"
+  echo "Kokoro v1.0 model already present in ${DEST}"
   exit 0
 fi
 
@@ -17,7 +17,7 @@ mkdir -p "$DEST"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "Downloading $PKG…"
+echo "Downloading ${PKG}..."
 curl -fSL --retry 3 -o "$TMP/kokoro.tar.bz2" "$BASE/$PKG.tar.bz2"
 tar xjf "$TMP/kokoro.tar.bz2" -C "$TMP" \
   "$PKG/model.onnx" "$PKG/voices.bin" "$PKG/tokens.txt" \
@@ -25,3 +25,4 @@ tar xjf "$TMP/kokoro.tar.bz2" -C "$TMP" \
 cp "$TMP/$PKG/"* "$DEST/"
 
 ls -lh "$DEST"
+test -f "$DEST/model.onnx" || { echo "Voice model download failed" >&2; exit 1; }
