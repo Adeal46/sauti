@@ -30,6 +30,10 @@ enum DocumentLoader {
         if type.conforms(to: .pdf) {
             return try loadPDF(url, fallbackTitle: fallbackTitle)
         }
+        if type.conforms(to: .epub) || url.pathExtension.lowercased() == "epub" {
+            let book = try EPUBReader.read(url)
+            return LoadedDocument(title: book.title, text: book.text, kind: .epub, cover: book.cover)
+        }
         if type.conforms(to: .rtf) {
             let attributed = try NSAttributedString(
                 url: url,

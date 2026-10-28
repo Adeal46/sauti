@@ -8,6 +8,7 @@ recognition and article extraction all run on the phone.
 |---|---|
 | Neural voices (27) | Kokoro-82M v1.0 (full precision) via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx), bundled in the app |
 | PDFs | PDFKit text, with OCR for scanned pages that have no text layer |
+| EPUB books | DRM-free EPUB 2/3: chapters in reading order, cover image |
 | Camera scans | VisionKit document scanner + Apple Vision text recognition |
 | Web articles | Downloaded once, cleaned with Mozilla Readability, then read offline |
 | Share from Safari | Share → Wolf Companion saves the link; the app imports it when opened |

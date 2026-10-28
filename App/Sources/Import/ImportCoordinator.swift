@@ -23,7 +23,11 @@ final class ImportCoordinator: ObservableObject {
         defer { end() }
 
         let hasAccess = url.startAccessingSecurityScopedResource()
-        defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
+        defer {
+            if hasAccess { url.stopAccessingSecurityScopedResource() }
+            // Files shared from other apps arrive as copies in Documents/Inbox; tidy up.
+            if url.path.contains("/Documents/Inbox/") { try? FileManager.default.removeItem(at: url) }
+        }
 
         do {
             let loaded = try await Task.detached(priority: .userInitiated) {

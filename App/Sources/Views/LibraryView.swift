@@ -15,7 +15,7 @@ struct LibraryView: View {
     @State private var renameText = ""
 
     enum Filter: String, CaseIterable, Identifiable {
-        case all = "All", inProgress = "In progress", pdf = "PDFs", scan = "Scans", web = "Web", text = "Text", finished = "Finished"
+        case all = "All", inProgress = "In progress", epub = "Books", pdf = "PDFs", scan = "Scans", web = "Web", text = "Text", finished = "Finished"
         var id: String { rawValue }
     }
 
@@ -34,6 +34,7 @@ struct LibraryView: View {
             case .all: return true
             case .inProgress: return document.progressFraction > 0 && !document.isFinished
             case .pdf: return document.kind == .pdf
+            case .epub: return document.kind == .epub
             case .scan: return document.kind == .scan
             case .web: return document.kind == .web
             case .text: return document.kind == .text
@@ -161,7 +162,7 @@ struct LibraryView: View {
                 .opacity(0.8)
             Text("Your den is empty")
                 .font(.system(.title3, design: .serif).weight(.bold))
-            Text("Tap + to add a PDF, a scan, a web article or some text.")
+            Text("Tap + to add a PDF, an EPUB book, a scan, a web article or some text.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

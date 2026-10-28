@@ -2,11 +2,12 @@ import Foundation
 import SwiftData
 
 enum DocumentKind: String, CaseIterable {
-    case pdf, scan, web, text
+    case pdf, epub, scan, web, text
 
     var label: String {
         switch self {
         case .pdf: return "PDF"
+        case .epub: return "Book"
         case .scan: return "Scan"
         case .web: return "Web"
         case .text: return "Text"
@@ -16,6 +17,7 @@ enum DocumentKind: String, CaseIterable {
     var symbol: String {
         switch self {
         case .pdf: return "doc.richtext"
+        case .epub: return "book.closed"
         case .scan: return "doc.viewfinder"
         case .web: return "safari"
         case .text: return "text.alignleft"

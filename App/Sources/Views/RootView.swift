@@ -17,7 +17,7 @@ final class AppRouter: ObservableObject {
 
         var title: String {
             switch self {
-            case .file: return "Import PDF"
+            case .file: return "Import file"
             case .scan: return "Scan pages"
             case .web: return "Web link"
             case .text: return "Paste text"
@@ -26,7 +26,7 @@ final class AppRouter: ObservableObject {
 
         var subtitle: String {
             switch self {
-            case .file: return "PDF or text file"
+            case .file: return "PDF, EPUB or text"
             case .scan: return "Books, notes, letters"
             case .web: return "Any article"
             case .text: return "From clipboard"
@@ -118,7 +118,7 @@ struct RootView: View {
         .preferredColorScheme(colorScheme)
         .fileImporter(
             isPresented: $router.showFileImporter,
-            allowedContentTypes: [.pdf, .plainText, .rtf, .text],
+            allowedContentTypes: [.pdf, .epub, .plainText, .rtf, .text],
             allowsMultipleSelection: true
         ) { result in
             switch result {
