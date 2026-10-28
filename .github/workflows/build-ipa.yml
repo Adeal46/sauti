@@ -26,14 +26,9 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Cache voice model
-        uses: actions/cache@v4
-        with:
-          path: App/Resources/KokoroModel
-          key: kokoro-multi-lang-v1_0-fp32-v1
-
       - name: Download voice model
         run: |
+          rm -rf App/Resources/KokoroModel
           bash scripts/fetch-models.sh
           echo "::notice::Voice model folder: $(ls App/Resources/KokoroModel | tr '\n' ' ') ($(du -sh App/Resources/KokoroModel | cut -f1))"
           test -f App/Resources/KokoroModel/model.onnx
