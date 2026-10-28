@@ -277,7 +277,11 @@ struct PlayerControls: View {
         if isActive {
             switch player.state {
             case .loadingVoice: return "Loading voice…"
-            case .buffering: return "Preparing audio…"
+            case .buffering:
+                if let stats = player.generationStats, stats < Double(player.rate) {
+                    return "Voice catching up…"
+                }
+                return "Preparing audio…"
             case .finished: return "Finished"
             default: break
             }

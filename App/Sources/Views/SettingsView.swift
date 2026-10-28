@@ -81,6 +81,22 @@ struct SettingsView: View {
                 Text("For Apple's best voices, open iPhone Settings → Accessibility → Spoken Content → Voices → English and download a \"Premium\" voice (for example Ava, Zoe or Evan). To read in your own voice, set up Personal Voice under Accessibility first. New voices appear here automatically.")
             }
 
+            Section {
+                Toggle("Use Neural Engine", isOn: $player.useNeuralEngine)
+                LabeledContent("Voice speed") {
+                    if let stats = player.generationStats {
+                        Text(String(format: "%.1f× real time", stats))
+                            .foregroundStyle(stats >= Double(player.rate) * 1.2 ? Color.green : Color.orange)
+                    } else {
+                        Text("Play something to measure")
+                    }
+                }
+            } header: {
+                Text("Voice engine")
+            } footer: {
+                Text("Voice speed shows how fast this iPhone makes speech. It needs to stay above your listening speed (now \(PlayerControls.rateLabel(player.rate))) or playback will pause to catch up. Try the Neural Engine on and off and keep whichever is faster.")
+            }
+
             Section("Reading") {
                 Picker("Default speed", selection: $player.rate) {
                     ForEach(PlaybackController.rates, id: \.self) { rate in

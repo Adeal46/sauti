@@ -8,10 +8,13 @@ import SherpaOnnxShared
 #endif
 
 /// Kokoro-82M v1.0 (full precision) running on-device through sherpa-onnx.
+/// Words found in the pronunciation dictionary use it; anything else (names,
+/// inflections like "opened") is phonemized by eSpeak so no word is skipped.
 final class KokoroEngine: SpeechEngine {
     static let modelFolderName = "KokoroModel"
     static let modelFile = "model.onnx"
-    static let requiredFiles = [modelFile, "voices.bin", "tokens.txt", "lexicon-us-en.txt", "lexicon-gb-en.txt"]
+    static let requiredFiles = [modelFile, "voices.bin", "tokens.txt", "lexicon-us-en.txt", "lexicon-gb-en.txt",
+                                "espeak-ng-data/en_dict"]
 
     private let tts: SherpaOnnxOfflineTtsWrapper
     private let speakerCount: Int
@@ -31,12 +34,12 @@ final class KokoroEngine: SpeechEngine {
     }
 
     /// Loading takes a few seconds; call it off the main thread.
-    static func load(accent: Accent) -> KokoroEngine? {
+    static func load(accent: Accent, useNeuralEngine: Bool) -> KokoroEngine? {
         guard isModelBundled, let dir = modelDirectory else { return nil }
-        return KokoroEngine(directory: dir, accent: accent)
+        return KokoroEngine(directory: dir, accent: accent, useNeuralEngine: useNeuralEngine)
     }
 
-    private init?(directory dir: URL, accent: Accent) {
+    private init?(directory dir: URL, accent: Accent, useNeuralEngine: Bool) {
         func path(_ name: String) -> String { dir.appendingPathComponent(name).path }
 
         // The pronunciation dictionary decides the accent (e.g. "tomato", "schedule").
@@ -45,9 +48,16 @@ final class KokoroEngine: SpeechEngine {
             model: path(Self.modelFile),
             voices: path("voices.bin"),
             tokens: path("tokens.txt"),
-            lexicon: path(lexicon)
+            dataDir: path("espeak-ng-data"),
+            lexicon: path(lexicon),
+            // eSpeak's plain "en" voice is British English.
+            lang: accent == .gb ? "en" : "en-us"
         )
-        let modelConfig = sherpaOnnxOfflineTtsModelConfig(kokoro: kokoro, numThreads: 4)
+        let modelConfig = sherpaOnnxOfflineTtsModelConfig(
+            kokoro: kokoro,
+            numThreads: 4,
+            provider: useNeuralEngine ? "coreml" : "cpu"
+        )
         var config = sherpaOnnxOfflineTtsConfig(model: modelConfig)
         let wrapper = SherpaOnnxOfflineTtsWrapper(config: &config)
         guard wrapper.tts != nil else { return nil }
@@ -62,6 +72,7 @@ final class KokoroEngine: SpeechEngine {
         guard case .kokoro(let sid, _) = voice.source else { return [] }
         let speaker = (0..<max(speakerCount, 1)).contains(sid) ? sid : 0
         let audio = tts.generate(text: text, sid: speaker, speed: min(max(speed, 0.5), maxNativeSpeed))
+        guard audio.audio != nil else { return [] }
         return audio.samples
     }
 }

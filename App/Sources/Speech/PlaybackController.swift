@@ -44,6 +44,26 @@ final class PlaybackController: ObservableObject {
         }
     }
 
+    /// Use the Neural Engine (CoreML) for Kokoro instead of only the CPU.
+    @Published var useNeuralEngine: Bool {
+        didSet {
+            guard oldValue != useNeuralEngine else { return }
+            UserDefaults.standard.set(useNeuralEngine, forKey: Keys.neuralEngine)
+            for key in engines.keys {
+                if case .kokoro = key { engines[key] = nil }
+            }
+            if case .kokoro = activeKind { activeEngine = nil; activeKind = nil }
+            generationStats = nil
+            if document != nil, state != .idle, state != .finished {
+                startPlayback(at: currentIndex, autoplay: isPlaying)
+            }
+        }
+    }
+
+    /// How many seconds of speech the voice produces per second of work (higher is better;
+    /// below the playback speed means the player will have to wait).
+    @Published private(set) var generationStats: Double?
+
     var isPlaying: Bool {
         state == .playing || state == .buffering || state == .loadingVoice
     }
@@ -55,11 +75,15 @@ final class PlaybackController: ObservableObject {
     private enum Keys {
         static let rate = "playbackRate"
         static let voice = "voiceKey"
+        static let neuralEngine = "useNeuralEngine"
     }
 
     private var segments: [Segment] = []
     private let synthesisQueue = DispatchQueue(label: "sauti.synthesis", qos: .userInitiated)
-    private let lookahead = 6
+    /// Keep generating until this much audio is waiting, so slow sentences don't cause gaps.
+    private let bufferTargetSeconds: Double = 45
+    private let maxQueuedSentences = 40
+    private var queuedSeconds: [Int: Double] = [:]
 
     private var generation = 0          // bumped on every seek/stop; stale work is ignored
     private var nextToGenerate = 0
@@ -84,6 +108,7 @@ final class PlaybackController: ObservableObject {
         let savedRate = defaults.float(forKey: Keys.rate)
         rate = savedRate > 0 ? savedRate : 1.0
         voiceID = defaults.string(forKey: Keys.voice) ?? VoiceCatalog.defaultVoiceID
+        useNeuralEngine = defaults.bool(forKey: Keys.neuralEngine)
 
         audioEngine.attach(playerNode)
         audioEngine.attach(timePitch)
@@ -182,6 +207,7 @@ final class PlaybackController: ObservableObject {
         generation &+= 1
         playerNode.stop()
         scheduled.removeAll()
+        queuedSeconds.removeAll()
         document = nil
         segments = []
         currentIndex = 0
@@ -195,6 +221,7 @@ final class PlaybackController: ObservableObject {
         generation &+= 1
         playerNode.stop()
         scheduled.removeAll()
+        queuedSeconds.removeAll()
         nextToGenerate = index
         currentIndex = index
         document?.progressIndex = index
@@ -231,8 +258,9 @@ final class PlaybackController: ObservableObject {
                 if case .kokoro = key { engines[key] = nil }
             }
             if case .kokoro = activeKind { activeEngine = nil; activeKind = nil }
+            let neural = useNeuralEngine
             synthesisQueue.async {
-                let engine = KokoroEngine.load(accent: accent)
+                let engine = KokoroEngine.load(accent: accent, useNeuralEngine: neural)
                 Task { @MainActor [weak self] in
                     self?.kokoroDidLoad(engine, kind: kind)
                 }
@@ -274,10 +302,12 @@ final class PlaybackController: ObservableObject {
         updateNowPlaying()
     }
 
-    /// Keeps up to `lookahead` sentences generated ahead of the one playing.
+    /// Keeps generating ahead of the listener until `bufferTargetSeconds` of audio is queued.
     private func pump() {
         guard state != .idle, state != .finished, state != .loadingVoice,
-              let engine = activeEngine, !isGenerating, scheduled.count < lookahead,
+              let engine = activeEngine, !isGenerating,
+              scheduled.count < maxQueuedSentences,
+              queuedSeconds.values.reduce(0, +) < bufferTargetSeconds,
               let index = nextSpeakable(from: nextToGenerate)
         else { return }
 
@@ -290,8 +320,14 @@ final class PlaybackController: ObservableObject {
         let pause = endsParagraph ? SilenceTrimmer.paragraphPause : SilenceTrimmer.sentencePause
 
         synthesisQueue.async {
+            let started = CFAbsoluteTimeGetCurrent()
             let raw = engine.synthesize(text, voice: voice, speed: speed)
+            let elapsed = CFAbsoluteTimeGetCurrent() - started
             let samples = SilenceTrimmer.tighten(raw, sampleRate: engine.sampleRate, pauseAfter: pause)
+            let produced = Double(raw.count) / engine.sampleRate
+            Task { @MainActor [weak self] in
+                self?.record(produced: produced, elapsed: elapsed)
+            }
             Task { @MainActor [weak self] in
                 self?.didGenerate(samples, index: index, sampleRate: engine.sampleRate, token: token)
             }
@@ -313,6 +349,7 @@ final class PlaybackController: ObservableObject {
                 if state == .buffering { state = .playing }
             }
             scheduled.append(index)
+            queuedSeconds[index] = Double(samples.count) / sampleRate / Double(max(rate, 0.25))
             playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 Task { @MainActor in
                     self?.didFinishPlaying(index, token: token)
@@ -329,6 +366,7 @@ final class PlaybackController: ObservableObject {
     private func didFinishPlaying(_ index: Int, token: Int) {
         guard token == generation else { return }
         scheduled.removeAll { $0 == index }
+        queuedSeconds[index] = nil
 
         if let next = scheduled.first {
             currentIndex = next
@@ -358,6 +396,12 @@ final class PlaybackController: ObservableObject {
             i += 1
         }
         return nil
+    }
+
+    private func record(produced: Double, elapsed: Double) {
+        guard produced > 0.3, elapsed > 0 else { return }
+        let sample = produced / elapsed
+        generationStats = generationStats.map { $0 * 0.7 + sample * 0.3 } ?? sample
     }
 
     // MARK: Audio session & graph
