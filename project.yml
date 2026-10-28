@@ -1,6 +1,6 @@
 # XcodeGen spec. The GitHub Actions workflow runs `xcodegen generate` to create
-# Sauti.xcodeproj, so the project file itself never needs to be committed.
-name: Sauti
+# WolfCompanion.xcodeproj, so the project file itself never needs to be committed.
+name: WolfCompanion
 
 options:
   bundleIdPrefix: com.adeal
@@ -12,8 +12,8 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
-    MARKETING_VERSION: "0.1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "0.2.0"
+    CURRENT_PROJECT_VERSION: "2"
     DEVELOPMENT_TEAM: ""
     ENABLE_USER_SCRIPT_SANDBOXING: NO
 
@@ -23,7 +23,7 @@ packages:
     exactVersion: 2.0.1
 
 targets:
-  Sauti:
+  WolfCompanion:
     type: application
     platform: iOS
     sources:
@@ -40,18 +40,19 @@ targets:
     dependencies:
       - package: sherpa-onnx
         product: sherpa-onnx
-      - target: SautiShare
+      - target: WolfCompanionShare
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Sauti
+        CFBundleDisplayName: Wolf Companion
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIBackgroundModes: [audio]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIApplicationSupportsIndirectInputEvents: true
-        NSCameraUsageDescription: Sauti uses the camera to scan printed pages so it can read them aloud.
+        NSCameraUsageDescription: Wolf Companion uses the camera to scan printed pages so it can read them aloud.
         LSSupportsOpeningDocumentsInPlace: false
         CFBundleDocumentTypes:
           - CFBundleTypeName: PDF Document
@@ -61,17 +62,18 @@ targets:
             LSHandlerRank: Alternate
             LSItemContentTypes: [public.plain-text, public.rtf]
     entitlements:
-      path: App/Sauti.entitlements
+      path: App/WolfCompanion.entitlements
       properties:
         com.apple.security.application-groups: [group.com.adeal.sauti]
     settings:
       base:
+        # Bundle ID unchanged so the new build replaces the installed app and keeps your library.
         PRODUCT_BUNDLE_IDENTIFIER: com.adeal.sauti
-        PRODUCT_NAME: Sauti
+        PRODUCT_NAME: WolfCompanion
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
 
-  SautiShare:
+  WolfCompanionShare:
     type: app-extension
     platform: iOS
     sources:
@@ -80,7 +82,7 @@ targets:
     info:
       path: ShareExtension/Info.plist
       properties:
-        CFBundleDisplayName: Sauti
+        CFBundleDisplayName: Wolf Companion
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
@@ -91,7 +93,7 @@ targets:
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
               NSExtensionActivationSupportsText: true
     entitlements:
-      path: ShareExtension/SautiShare.entitlements
+      path: ShareExtension/WolfCompanionShare.entitlements
       properties:
         com.apple.security.application-groups: [group.com.adeal.sauti]
     settings:
@@ -100,10 +102,10 @@ targets:
         APPLICATION_EXTENSION_API_ONLY: YES
 
 schemes:
-  Sauti:
+  WolfCompanion:
     build:
       targets:
-        Sauti: all
+        WolfCompanion: all
     run:
       config: Debug
     archive:

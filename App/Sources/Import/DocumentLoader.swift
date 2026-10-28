@@ -7,6 +7,7 @@ struct LoadedDocument {
     let title: String
     let text: String
     let kind: DocumentKind
+    var cover: Data? = nil
 }
 
 enum ImportError: LocalizedError {
@@ -71,7 +72,7 @@ enum DocumentLoader {
         let metadataTitle = (pdf.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let title = (metadataTitle?.isEmpty == false ? metadataTitle : nil) ?? fallbackTitle
-        return LoadedDocument(title: title, text: text, kind: .pdf)
+        return LoadedDocument(title: title, text: text, kind: .pdf, cover: CoverRenderer.pdfCover(pdf))
     }
 
     private static func render(_ page: PDFPage) -> CGImage? {

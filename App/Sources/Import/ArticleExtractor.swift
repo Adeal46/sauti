@@ -35,10 +35,11 @@ final class ArticleExtractor: NSObject, WKNavigationDelegate {
     private struct Extracted: Decodable {
         let title: String?
         let text: String?
+        let image: String?
         let error: String?
     }
 
-    func extract(from url: URL) async throws -> (title: String, text: String) {
+    func extract(from url: URL) async throws -> (title: String, text: String, imageURL: URL?) {
         var request = URLRequest(url: url, timeoutInterval: 30)
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
@@ -72,7 +73,9 @@ final class ArticleExtractor: NSObject, WKNavigationDelegate {
         else { throw ArticleError.noArticle }
 
         let title = result.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (title?.isEmpty == false ? title! : (baseURL.host ?? "Web article"), text)
+        let image = result.image.flatMap { URL(string: $0, relativeTo: baseURL)?.absoluteURL }
+            .flatMap { ["http", "https"].contains($0.scheme?.lowercased() ?? "") ? $0 : nil }
+        return (title?.isEmpty == false ? title! : (baseURL.host ?? "Web article"), text, image)
     }
 
     // MARK: Web view
@@ -160,7 +163,9 @@ final class ArticleExtractor: NSObject, WKNavigationDelegate {
             .map(function (s) { return s.replace(/\\s+/g, " ").trim(); })
             .filter(function (s) { return s.length > 0; });
         }
-        return JSON.stringify({ title: title, text: parts.join("\\n") });
+        var meta = document.querySelector('meta[property="og:image"], meta[name="og:image"], meta[name="twitter:image"], meta[property="twitter:image"]');
+        var image = meta ? (meta.getAttribute("content") || "") : "";
+        return JSON.stringify({ title: title, text: parts.join("\\n"), image: image });
       } catch (e) {
         return JSON.stringify({ error: String(e) });
       }

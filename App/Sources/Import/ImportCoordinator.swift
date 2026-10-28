@@ -29,7 +29,7 @@ final class ImportCoordinator: ObservableObject {
             let loaded = try await Task.detached(priority: .userInitiated) {
                 try DocumentLoader.load(url)
             }.value
-            insert(title: loaded.title, text: loaded.text, kind: loaded.kind, source: nil, into: context)
+            insert(title: loaded.title, text: loaded.text, kind: loaded.kind, source: nil, cover: loaded.cover, into: context)
         } catch {
             errorMessage = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
         }
@@ -50,7 +50,8 @@ final class ImportCoordinator: ObservableObject {
                     .joined(separator: "\n")
             }.value
             let title = TextCleaner.title(fromText: text) ?? "Scan, \(Date().formatted(date: .abbreviated, time: .shortened))"
-            insert(title: title, text: text, kind: .scan, source: nil, into: context)
+            let cover = images.first.flatMap { CoverRenderer.imageCover($0) }
+            insert(title: title, text: text, kind: .scan, source: nil, cover: cover, into: context)
         } catch {
             errorMessage = "Text recognition failed: \(error.localizedDescription)"
         }
@@ -63,7 +64,12 @@ final class ImportCoordinator: ObservableObject {
         defer { end() }
         do {
             let article = try await articleExtractor.extract(from: url)
-            insert(title: article.title, text: article.text, kind: .web, source: url.absoluteString, into: context)
+            var cover: Data?
+            if let imageURL = article.imageURL {
+                busyMessage = "Fetching cover…"
+                cover = await CoverRenderer.downloadCover(from: imageURL)
+            }
+            insert(title: article.title, text: article.text, kind: .web, source: url.absoluteString, cover: cover, into: context)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -94,13 +100,13 @@ final class ImportCoordinator: ObservableObject {
 
     // MARK: Helpers
 
-    private func insert(title: String, text: String, kind: DocumentKind, source: String?, into context: ModelContext) {
+    private func insert(title: String, text: String, kind: DocumentKind, source: String?, cover: Data? = nil, into context: ModelContext) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.rangeOfCharacter(from: .letters) != nil else {
             errorMessage = "No readable text was found."
             return
         }
-        let document = ReadingDocument(title: title, text: trimmed, kind: kind, sourceURL: source)
+        let document = ReadingDocument(title: title, text: trimmed, kind: kind, sourceURL: source, coverData: cover)
         context.insert(document)
         try? context.save()
     }

@@ -64,7 +64,7 @@ struct AddLinkSheet: View {
                         }
                     }
                 } footer: {
-                    Text("Sauti downloads the page once, keeps just the article text, and reads it offline. In Safari you can also tap Share → Sauti.")
+                    Text("Wolf Companion downloads the page once, keeps just the article text, and reads it offline. In Safari you can also tap Share → Wolf Companion.")
                 }
             }
             .navigationTitle("Add web article")

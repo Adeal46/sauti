@@ -52,7 +52,7 @@ final class PlaybackController: ObservableObject {
 
     private var segments: [Segment] = []
     private let synthesisQueue = DispatchQueue(label: "sauti.synthesis", qos: .userInitiated)
-    private let lookahead = 3
+    private let lookahead = 6
 
     private var generation = 0          // bumped on every seek/stop; stale work is ignored
     private var nextToGenerate = 0
@@ -95,6 +95,29 @@ final class PlaybackController: ObservableObject {
         document.lastOpenedAt = Date()
         let start = index ?? (document.progressIndex < content.segments.count ? document.progressIndex : 0)
         startPlayback(at: start, autoplay: true)
+    }
+
+    func isActive(_ document: ReadingDocument) -> Bool {
+        self.document?.id == document.id && state != .idle
+    }
+
+    /// Play from the library without opening the reader first.
+    func playOrToggle(_ document: ReadingDocument) {
+        if isActive(document) {
+            togglePlayPause()
+            return
+        }
+        let text = document.text
+        Task {
+            let content = await Task.detached(priority: .userInitiated) {
+                TextSegmenter.segment(text)
+            }.value
+            if document.segmentCount != content.segments.count {
+                document.segmentCount = content.segments.count
+            }
+            guard !content.segments.isEmpty else { return }
+            play(document: document, content: content)
+        }
     }
 
     func togglePlayPause() {
@@ -242,9 +265,12 @@ final class PlaybackController: ObservableObject {
         let token = generation
         let text = segments[index].speakText
         let voice = voiceID
+        let endsParagraph = index + 1 >= segments.count || segments[index + 1].paragraph != segments[index].paragraph
+        let pause = endsParagraph ? SilenceTrimmer.paragraphPause : SilenceTrimmer.sentencePause
 
         synthesisQueue.async {
-            let samples = engine.synthesize(text, voice: voice)
+            let raw = engine.synthesize(text, voice: voice)
+            let samples = SilenceTrimmer.tighten(raw, sampleRate: engine.sampleRate, pauseAfter: pause)
             Task { @MainActor [weak self] in
                 self?.didGenerate(samples, index: index, sampleRate: engine.sampleRate, token: token)
             }
@@ -298,6 +324,7 @@ final class PlaybackController: ObservableObject {
 
     private func finish() {
         state = .finished
+        document?.finishedAt = Date()
         document?.progressIndex = 0
         updateNowPlaying()
     }
@@ -408,7 +435,7 @@ final class PlaybackController: ObservableObject {
         }
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: document.title,
-            MPMediaItemPropertyArtist: "Sauti",
+            MPMediaItemPropertyArtist: "Wolf Companion",
             MPNowPlayingInfoPropertyPlaybackRate: state == .playing ? Double(rate) : 0.0,
         ]
         if segments.count > 1 {

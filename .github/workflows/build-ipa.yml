@@ -1,6 +1,6 @@
 name: Build IPA
 
-# Builds an unsigned Sauti.ipa on a GitHub-hosted Mac. Download it from the run's
+# Builds an unsigned WolfCompanion.ipa on a GitHub-hosted Mac. Download it from the run's
 # "Artifacts" section and install it with Sideloadly (see README).
 on:
   push:
@@ -42,8 +42,8 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
-            -project Sauti.xcodeproj \
-            -scheme Sauti \
+            -project WolfCompanion.xcodeproj \
+            -scheme WolfCompanion \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -58,42 +58,42 @@ jobs:
           { grep -E "^/.*: error: " build.log || true; } | sort -u | head -20 | while IFS= read -r line; do
             echo "::error::${line#*/sauti/}"
           done
-          APP="build/Build/Products/Release-iphoneos/Sauti.app"
-          if ! grep -q "BUILD SUCCEEDED" build.log || [ ! -f "$APP/Sauti" ]; then
+          APP="build/Build/Products/Release-iphoneos/WolfCompanion.app"
+          if ! grep -q "BUILD SUCCEEDED" build.log || [ ! -f "$APP/WolfCompanion" ]; then
             echo "::error::Build failed — see the build-log artifact."
             exit 1
           fi
-          BIN=$(du -h "$APP/Sauti" | cut -f1)
-          APPEX=$([ -f "$APP/PlugIns/SautiShare.appex/SautiShare" ] && echo yes || echo no)
+          BIN=$(du -h "$APP/WolfCompanion" | cut -f1)
+          APPEX=$([ -f "$APP/PlugIns/WolfCompanionShare.appex/WolfCompanionShare" ] && echo yes || echo no)
           MODEL=$(ls "$APP/KokoroModel" 2>/dev/null | tr '\n' ' ')
           echo "::notice::Build OK on $(xcodebuild -version | head -1). App binary ${BIN}, share extension: ${APPEX}, voice files: ${MODEL}"
 
       - name: Package IPAs
         run: |
           set -euo pipefail
-          APP="build/Build/Products/Release-iphoneos/Sauti.app"
+          APP="build/Build/Products/Release-iphoneos/WolfCompanion.app"
           # Plain ad-hoc signatures with no entitlements, so free Apple IDs can sign it
           # (no app group needed; the share extension falls back to the clipboard).
-          if [ -d "$APP/PlugIns/SautiShare.appex" ]; then
-            codesign --force --sign - "$APP/PlugIns/SautiShare.appex"
+          if [ -d "$APP/PlugIns/WolfCompanionShare.appex" ]; then
+            codesign --force --sign - "$APP/PlugIns/WolfCompanionShare.appex"
           fi
           codesign --force --sign - "$APP"
           mkdir -p Payload
           cp -R "$APP" Payload/
-          zip -qry Sauti.ipa Payload
+          zip -qry WolfCompanion.ipa Payload
           # Simplest variant: no share extension (needs only one App ID).
-          rm -rf Payload/Sauti.app/PlugIns
-          codesign --force --sign - Payload/Sauti.app
-          zip -qry Sauti-no-extension.ipa Payload
+          rm -rf Payload/WolfCompanion.app/PlugIns
+          codesign --force --sign - Payload/WolfCompanion.app
+          zip -qry WolfCompanion-no-extension.ipa Payload
           ls -lh *.ipa
 
       - name: Upload IPAs
         uses: actions/upload-artifact@v4
         with:
-          name: Sauti-ipa
+          name: WolfCompanion-ipa
           path: |
-            Sauti.ipa
-            Sauti-no-extension.ipa
+            WolfCompanion.ipa
+            WolfCompanion-no-extension.ipa
           retention-days: 14
 
       - name: Upload build log

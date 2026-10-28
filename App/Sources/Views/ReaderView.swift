@@ -14,7 +14,7 @@ struct ReaderView: View {
             if let content {
                 if content.segments.isEmpty {
                     ContentUnavailableView("No readable text", systemImage: "text.badge.xmark",
-                                           description: Text("This document doesn't contain text Sauti can read."))
+                                           description: Text("This document doesn't contain text Wolf Companion can read."))
                 } else {
                     reader(content)
                         .safeAreaInset(edge: .bottom) {
@@ -25,8 +25,10 @@ struct ReaderView: View {
                 ProgressView("Preparing…")
             }
         }
+        .background(ScreenBackground())
         .navigationTitle(document.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -71,6 +73,7 @@ struct ReaderView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
+                    header
                     ForEach(content.paragraphs) { paragraph in
                         Text(attributed(paragraph, in: content))
                             .font(.system(size: fontSize, design: .serif))
@@ -99,6 +102,22 @@ struct ReaderView: View {
                 }
             }
         }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 14) {
+            CoverView(document: document, cornerRadius: 8)
+                .frame(width: 64)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(document.title)
+                    .font(.system(.title3, design: .serif).weight(.bold))
+                    .lineLimit(3)
+                Text("\(document.kind.label) · \(Theme.minutesLabel(document.estimatedWords / (Theme.wordsPerMinute * Double(player.rate)))) listen")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.bottom, 10)
     }
 
     private func attributed(_ paragraph: Paragraph, in content: ReaderContent) -> AttributedString {

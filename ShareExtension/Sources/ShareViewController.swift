@@ -1,7 +1,7 @@
 import UIKit
 import UniformTypeIdentifiers
 
-/// "Share → Sauti" from Safari or any app. Saves the link (or selected text) for the
+/// "Share → Wolf Companion" from Safari or any app. Saves the link (or selected text) for the
 /// main app to import the next time it opens.
 final class ShareViewController: UIViewController {
     private let iconView = UIImageView()
@@ -25,11 +25,11 @@ final class ShareViewController: UIViewController {
         view.addSubview(card)
 
         iconView.image = UIImage(systemName: "waveform")
-        iconView.tintColor = .systemOrange
+        iconView.tintColor = .systemPurple
         iconView.contentMode = .scaleAspectFit
         iconView.isHidden = true
 
-        titleLabel.text = "Saving to Sauti…"
+        titleLabel.text = "Saving to Wolf Companion…"
         titleLabel.font = .preferredFont(forTextStyle: .headline)
         titleLabel.textAlignment = .center
 
@@ -68,17 +68,17 @@ final class ShareViewController: UIViewController {
         }
 
         if SharedInbox.add(item) {
-            show(title: "Saved to Sauti", detail: "Open Sauti to start listening.")
+            show(title: "Saved to Wolf Companion", detail: "Open Wolf Companion to start listening.")
         } else {
             // No shared container in this install: put it on the clipboard instead.
             switch item.kind {
             case .url: UIPasteboard.general.url = URL(string: item.value)
             case .text: UIPasteboard.general.string = item.value
             }
-            show(title: "Copied for Sauti",
+            show(title: "Copied for Wolf Companion",
                  detail: item.kind == .url
-                    ? "Open Sauti and tap Paste on the banner."
-                    : "Open Sauti, tap +, then Paste text.")
+                    ? "Open Wolf Companion and tap Paste on the Home screen."
+                    : "Open Wolf Companion, then tap Paste text.")
         }
         await close(after: 1.2)
     }

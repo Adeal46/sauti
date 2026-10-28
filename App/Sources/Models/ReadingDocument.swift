@@ -36,8 +36,11 @@ final class ReadingDocument {
     var progressIndex: Int
     /// Number of sentences, filled in the first time the document is opened.
     var segmentCount: Int
+    /// JPEG thumbnail: first PDF page, first scanned page, or the article's preview image.
+    @Attribute(.externalStorage) var coverData: Data?
+    var finishedAt: Date?
 
-    init(title: String, text: String, kind: DocumentKind, sourceURL: String? = nil) {
+    init(title: String, text: String, kind: DocumentKind, sourceURL: String? = nil, coverData: Data? = nil) {
         self.id = UUID()
         self.title = title
         self.text = text
@@ -47,6 +50,8 @@ final class ReadingDocument {
         self.lastOpenedAt = nil
         self.progressIndex = 0
         self.segmentCount = 0
+        self.coverData = coverData
+        self.finishedAt = nil
     }
 
     var kind: DocumentKind { DocumentKind(rawValue: kindRaw) ?? .text }
