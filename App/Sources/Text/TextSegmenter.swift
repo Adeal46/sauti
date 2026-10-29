@@ -140,6 +140,12 @@ enum SpeechNormalizer {
 
     static func normalize(_ input: String) -> String {
         var out = input
+            // Typographic quotes (common in books) → plain ones the dictionary knows.
+            .replacingOccurrences(of: "\u{2019}", with: "'")
+            .replacingOccurrences(of: "\u{2018}", with: "'")
+            .replacingOccurrences(of: "\u{201C}", with: "\"")
+            .replacingOccurrences(of: "\u{201D}", with: "\"")
+            .replacingOccurrences(of: "\u{2026}", with: "...")
             .replacingOccurrences(of: "%", with: " percent")
             .replacingOccurrences(of: "&", with: " and ")
             .replacingOccurrences(of: "+", with: " plus ")
