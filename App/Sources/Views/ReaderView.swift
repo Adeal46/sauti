@@ -1,10 +1,16 @@
+import PDFKit
 import SwiftUI
 
 struct ReaderView: View {
     let document: ReadingDocument
     @EnvironmentObject private var player: PlaybackController
     @AppStorage("readerFontSize") private var fontSize: Double = 19
+    @AppStorage("pdfPageView") private var preferPages = true
     @State private var content: ReaderContent?
+    @State private var pdf: PDFDocument?
+    @State private var pdfMap: PDFTextMap?
+
+    private var showingPages: Bool { preferPages && pdf != nil && pdfMap != nil }
 
     private var isActive: Bool { player.document?.id == document.id }
     private var highlightedIndex: Int? { isActive && player.state != .idle ? player.currentIndex : nil }
@@ -16,10 +22,22 @@ struct ReaderView: View {
                     ContentUnavailableView("No readable text", systemImage: "text.badge.xmark",
                                            description: Text("This document doesn't contain text Wolf Companion can read."))
                 } else {
-                    reader(content)
-                        .safeAreaInset(edge: .bottom) {
-                            PlayerControls(document: document, content: content)
+                    Group {
+                        if showingPages, let pdf, let pdfMap {
+                            PDFPageReader(
+                                pdf: pdf, map: pdfMap, content: content, documentID: document.id,
+                                player: player,
+                                onTapSegment: { player.play(document: document, content: content, from: $0) },
+                                startSegment: isActive ? player.currentIndex : document.progressIndex
+                            )
+                            .ignoresSafeArea(edges: .bottom)
+                        } else {
+                            reader(content)
                         }
+                    }
+                    .safeAreaInset(edge: .bottom) {
+                        PlayerControls(document: document, content: content)
+                    }
                 }
             } else {
                 ProgressView("Preparing…")
@@ -30,6 +48,16 @@ struct ReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
+            if pdf != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        preferPages.toggle()
+                    } label: {
+                        Image(systemName: preferPages ? "text.alignleft" : "doc.richtext")
+                    }
+                    .accessibilityLabel(preferPages ? "Show as text" : "Show PDF pages")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -67,6 +95,18 @@ struct ReaderView: View {
         }
         document.lastOpenedAt = Date()
         content = prepared
+
+        if document.kind == .pdf, let data = document.fileData {
+            let segments = prepared.segments
+            let loaded = await Task.detached(priority: .userInitiated) { () -> (PDFDocument, PDFTextMap)? in
+                guard let pdf = PDFDocument(data: data) else { return nil }
+                return (pdf, PDFTextMap(pdf: pdf, segments: segments))
+            }.value
+            if let loaded {
+                pdf = loaded.0
+                pdfMap = loaded.1
+            }
+        }
     }
 
     private func reader(_ content: ReaderContent) -> some View {
@@ -75,7 +115,7 @@ struct ReaderView: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                     header
                     ForEach(content.paragraphs) { paragraph in
-                        Text(attributed(paragraph, in: content))
+                        paragraphText(paragraph, in: content)
                             .font(.system(size: fontSize, design: .serif))
                             .lineSpacing(fontSize * 0.3)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -120,20 +160,48 @@ struct ReaderView: View {
         .padding(.bottom, 10)
     }
 
-    private func attributed(_ paragraph: Paragraph, in content: ReaderContent) -> AttributedString {
+    /// The paragraph being read re-renders a few times a second to move the word cursor.
+    @ViewBuilder
+    private func paragraphText(_ paragraph: Paragraph, in content: ReaderContent) -> some View {
+        if let active = highlightedIndex, paragraph.segmentRange.contains(active), player.state == .playing {
+            TimelineView(.periodic(from: .now, by: 0.12)) { _ in
+                Text(attributed(paragraph, in: content, wordFraction: player.progressInCurrentSegment()))
+            }
+        } else {
+            Text(attributed(paragraph, in: content, wordFraction: nil))
+        }
+    }
+
+    private func attributed(_ paragraph: Paragraph, in content: ReaderContent, wordFraction: Double?) -> AttributedString {
         var result = AttributedString()
         let active = highlightedIndex
+        let sentenceColor = Color.accentColor.opacity(0.22)
         for i in paragraph.segmentRange {
-            var piece = AttributedString(content.segments[i].display)
-            if let active {
+            let display = content.segments[i].display
+            if let active, i == active {
                 // Explicit Color values keep these on SwiftUI's attributes (not UIKit's).
-                if i == active {
-                    piece.backgroundColor = Color.accentColor.opacity(0.28)
-                } else if i < active {
+                if let fraction = wordFraction, let word = WordCursor.word(in: display, at: fraction) {
+                    var before = AttributedString(String(display[..<word.range.lowerBound]))
+                    var spoken = AttributedString(String(display[word.range]))
+                    var after = AttributedString(String(display[word.range.upperBound...]))
+                    before.backgroundColor = sentenceColor
+                    spoken.backgroundColor = Color.accentColor.opacity(0.55)
+                    after.backgroundColor = sentenceColor
+                    result.append(before)
+                    result.append(spoken)
+                    result.append(after)
+                } else {
+                    var piece = AttributedString(display)
+                    piece.backgroundColor = sentenceColor
+                    result.append(piece)
+                }
+            } else {
+                var piece = AttributedString(display)
+                if let active, i < active {
                     piece.foregroundColor = Color.secondary
                 }
+                result.append(piece)
             }
-            result.append(piece)
         }
         return result
     }

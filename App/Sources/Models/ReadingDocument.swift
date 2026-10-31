@@ -41,6 +41,8 @@ final class ReadingDocument {
     /// JPEG thumbnail: first PDF page, first scanned page, or the article's preview image.
     @Attribute(.externalStorage) var coverData: Data?
     var finishedAt: Date?
+    /// The original file (PDFs), so the reader can show real pages.
+    @Attribute(.externalStorage) var fileData: Data?
 
     init(title: String, text: String, kind: DocumentKind, sourceURL: String? = nil, coverData: Data? = nil) {
         self.id = UUID()

@@ -33,7 +33,8 @@ final class ImportCoordinator: ObservableObject {
             let loaded = try await Task.detached(priority: .userInitiated) {
                 try DocumentLoader.load(url)
             }.value
-            insert(title: loaded.title, text: loaded.text, kind: loaded.kind, source: nil, cover: loaded.cover, into: context)
+            insert(title: loaded.title, text: loaded.text, kind: loaded.kind, source: nil, cover: loaded.cover,
+                   original: loaded.original, into: context)
         } catch {
             errorMessage = "Couldn't import \(url.lastPathComponent): \(error.localizedDescription)"
         }
@@ -104,13 +105,15 @@ final class ImportCoordinator: ObservableObject {
 
     // MARK: Helpers
 
-    private func insert(title: String, text: String, kind: DocumentKind, source: String?, cover: Data? = nil, into context: ModelContext) {
+    private func insert(title: String, text: String, kind: DocumentKind, source: String?, cover: Data? = nil,
+                        original: Data? = nil, into context: ModelContext) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.rangeOfCharacter(from: .letters) != nil else {
             errorMessage = "No readable text was found."
             return
         }
         let document = ReadingDocument(title: title, text: trimmed, kind: kind, sourceURL: source, coverData: cover)
+        document.fileData = original
         context.insert(document)
         try? context.save()
     }

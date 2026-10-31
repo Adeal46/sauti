@@ -1,6 +1,7 @@
 import AVFoundation
 import MediaPlayer
 import SwiftUI
+import UIKit
 
 /// Generates speech a few sentences ahead of the listener and plays it through
 /// AVAudioEngine. Kokoro speaks faster by itself (up to 2×), which sounds natural;
@@ -13,7 +14,9 @@ final class PlaybackController: ObservableObject {
 
     static let rates: [Float] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]
 
-    @Published private(set) var state: State = .idle
+    @Published private(set) var state: State = .idle {
+        didSet { if oldValue != state { log("state \(oldValue) → \(state)") } }
+    }
     @Published private(set) var currentIndex: Int = 0
     @Published private(set) var document: ReadingDocument?
     @Published var errorMessage: String?
@@ -84,6 +87,11 @@ final class PlaybackController: ObservableObject {
     private let bufferTargetSeconds: Double = 45
     private let maxQueuedSentences = 40
     private var queuedSeconds: [Int: Double] = [:]
+    /// Where each queued sentence starts in the player's timeline (frames), for the word cursor.
+    private var segmentStartFrame: [Int: AVAudioFramePosition] = [:]
+    private var segmentFrameCount: [Int: AVAudioFramePosition] = [:]
+    private var scheduledFrames: AVAudioFramePosition = 0
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
     private var generation = 0          // bumped on every seek/stop; stale work is ignored
     private var nextToGenerate = 0
@@ -116,7 +124,32 @@ final class PlaybackController: ObservableObject {
         applyTimePitch()
 
         observeAudioSession()
+        observeApp()
         setUpRemoteCommands()
+    }
+
+    // MARK: Word cursor
+
+    /// How far (0…1) the listener is through the sentence being spoken right now.
+    func progressInCurrentSegment() -> Double? {
+        guard state == .playing || state == .paused,
+              let start = segmentStartFrame[currentIndex],
+              let length = segmentFrameCount[currentIndex], length > 0,
+              let nodeTime = playerNode.lastRenderTime,
+              let playerTime = playerNode.playerTime(forNodeTime: nodeTime)
+        else { return nil }
+        let fraction = Double(playerTime.sampleTime - start) / Double(length)
+        return min(max(fraction, 0), 1)
+    }
+
+    private func resetTimeline() {
+        segmentStartFrame.removeAll()
+        segmentFrameCount.removeAll()
+        scheduledFrames = 0
+    }
+
+    private func log(_ message: String) {
+        DiagnosticsLog.shared.log(message)
     }
 
     // MARK: Public controls
@@ -208,6 +241,7 @@ final class PlaybackController: ObservableObject {
         playerNode.stop()
         scheduled.removeAll()
         queuedSeconds.removeAll()
+        resetTimeline()
         document = nil
         segments = []
         currentIndex = 0
@@ -222,6 +256,7 @@ final class PlaybackController: ObservableObject {
         playerNode.stop()
         scheduled.removeAll()
         queuedSeconds.removeAll()
+        resetTimeline()
         nextToGenerate = index
         currentIndex = index
         document?.progressIndex = index
@@ -244,6 +279,10 @@ final class PlaybackController: ObservableObject {
 
         state = .loadingVoice
         updateNowPlaying()
+        // Start the audio session right away so iOS keeps the app running if the
+        // screen is locked while the voice is still loading.
+        try? configureAudio(sampleRate: 24_000)
+        beginBackgroundWork()
 
         switch kind {
         case .apple:
@@ -259,8 +298,11 @@ final class PlaybackController: ObservableObject {
             }
             if case .kokoro = activeKind { activeEngine = nil; activeKind = nil }
             let neural = useNeuralEngine
+            log("loading Kokoro \(accent) neural=\(neural)")
             synthesisQueue.async {
+                let started = CFAbsoluteTimeGetCurrent()
                 let engine = KokoroEngine.load(accent: accent, useNeuralEngine: neural)
+                DiagnosticsLog.shared.log(String(format: "Kokoro loaded=%@ in %.1fs", engine == nil ? "NO" : "yes", CFAbsoluteTimeGetCurrent() - started))
                 Task { @MainActor [weak self] in
                     self?.kokoroDidLoad(engine, kind: kind)
                 }
@@ -285,6 +327,7 @@ final class PlaybackController: ObservableObject {
     }
 
     private func begin(with engine: SpeechEngine, kind: EngineKind) {
+        endBackgroundWork()
         activeEngine = engine
         activeKind = kind
         generationSpeed = min(rate, engine.maxNativeSpeed)
@@ -292,6 +335,7 @@ final class PlaybackController: ObservableObject {
         do {
             try configureAudio(sampleRate: engine.sampleRate)
         } catch {
+            log("audio start failed: \(error.localizedDescription)")
             errorMessage = "Audio couldn't start: \(error.localizedDescription)"
             state = .idle
             return
@@ -324,6 +368,7 @@ final class PlaybackController: ObservableObject {
             let raw = engine.synthesize(text, voice: voice, speed: speed)
             let elapsed = CFAbsoluteTimeGetCurrent() - started
             let samples = SilenceTrimmer.tighten(raw, sampleRate: engine.sampleRate, pauseAfter: pause)
+            if raw.isEmpty { DiagnosticsLog.shared.log("no audio for sentence \(index)") }
             let produced = Double(raw.count) / engine.sampleRate
             Task { @MainActor [weak self] in
                 self?.record(produced: produced, elapsed: elapsed)
@@ -349,6 +394,9 @@ final class PlaybackController: ObservableObject {
                 if state == .buffering { state = .playing }
             }
             scheduled.append(index)
+            segmentStartFrame[index] = scheduledFrames
+            segmentFrameCount[index] = AVAudioFramePosition(buffer.frameLength)
+            scheduledFrames += AVAudioFramePosition(buffer.frameLength)
             queuedSeconds[index] = Double(samples.count) / sampleRate / Double(max(rate, 0.25))
             playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 Task { @MainActor in
@@ -367,6 +415,8 @@ final class PlaybackController: ObservableObject {
         guard token == generation else { return }
         scheduled.removeAll { $0 == index }
         queuedSeconds[index] = nil
+        segmentStartFrame[index] = nil
+        segmentFrameCount[index] = nil
 
         if let next = scheduled.first {
             currentIndex = next
@@ -376,6 +426,7 @@ final class PlaybackController: ObservableObject {
             return
         } else if state == .playing {
             state = .buffering
+            log("ran out of audio at sentence \(index) (voice \(String(format: "%.1f", generationStats ?? 0))× real time)")
         }
         pump()
         updateNowPlaying()
@@ -457,6 +508,7 @@ final class PlaybackController: ObservableObject {
         observers.append(center.addObserver(forName: .AVAudioEngineConfigurationChange, object: audioEngine, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                self.log("audio engine configuration changed")
                 if self.isPlaying, self.state != .loadingVoice {
                     self.startPlayback(at: self.currentIndex, autoplay: true)
                 }
@@ -464,7 +516,61 @@ final class PlaybackController: ObservableObject {
         })
     }
 
+    private func observeApp() {
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.didEnterBackground() }
+        })
+        observers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.log("foreground (state \(String(describing: self?.state)))") }
+        })
+        observers.append(center.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.didReceiveMemoryWarning() }
+        })
+    }
+
+    private func didEnterBackground() {
+        log("background: state \(state), engine running \(audioEngine.isRunning), queued \(scheduled.count)")
+        // The GPU isn't available to apps in the background, so a Neural Engine (CoreML)
+        // voice is swapped for a CPU one. The swap happens on the synthesis queue while
+        // the already-buffered audio keeps playing.
+        guard useNeuralEngine, case .kokoro(let accent) = activeKind, isPlaying else { return }
+        let kind = EngineKind.kokoro(accent)
+        log("switching voice to CPU for background")
+        synthesisQueue.async {
+            let engine = KokoroEngine.load(accent: accent, useNeuralEngine: false)
+            Task { @MainActor [weak self] in
+                guard let self, let engine, self.activeKind == kind else { return }
+                self.engines[kind] = engine
+                self.activeEngine = engine
+                self.log("background voice ready")
+                self.pump()
+            }
+        }
+    }
+
+    private func didReceiveMemoryWarning() {
+        log("memory warning")
+        for key in engines.keys where key != activeKind {
+            engines[key] = nil
+        }
+    }
+
+    private func beginBackgroundWork() {
+        guard backgroundTask == .invalid else { return }
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "LoadVoice") { [weak self] in
+            Task { @MainActor in self?.endBackgroundWork() }
+        }
+    }
+
+    private func endBackgroundWork() {
+        guard backgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(backgroundTask)
+        backgroundTask = .invalid
+    }
+
     private func handleInterruption(began: Bool, shouldResume: Bool) {
+        log("interruption \(began ? "began" : "ended") shouldResume=\(shouldResume)")
         if began {
             resumeAfterInterruption = isPlaying
             if isPlaying { pause() }
@@ -512,6 +618,9 @@ final class PlaybackController: ObservableObject {
         ]
         if segments.count > 1 {
             info[MPNowPlayingInfoPropertyPlaybackProgress] = Double(currentIndex) / Double(segments.count - 1)
+        }
+        if let cover = CoverCache.image(for: document) {
+            info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: cover.size) { _ in cover }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }

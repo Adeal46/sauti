@@ -115,6 +115,12 @@ struct SettingsView: View {
                 }
             }
 
+            Section {
+                NavigationLink("Diagnostics") { DiagnosticsView() }
+            } footer: {
+                Text("A log of playback events. If reading stops when the screen is locked, share it with whoever is helping you fix it.")
+            }
+
             Section("About") {
                 LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "–")
                 LabeledContent("Voice engine", value: "Kokoro-82M v1.0 · sherpa-onnx")
@@ -143,5 +149,36 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+}
+
+struct DiagnosticsView: View {
+    @State private var text = ""
+
+    var body: some View {
+        ScrollView {
+            Text(text.isEmpty ? "No events yet. Play something, lock the screen for a minute, then come back." : text)
+                .font(.caption.monospaced())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+                .padding()
+        }
+        .background(ScreenBackground())
+        .navigationTitle("Diagnostics")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                ShareLink(item: text.isEmpty ? "No events" : text) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Clear") {
+                    DiagnosticsLog.shared.clear()
+                    text = ""
+                }
+            }
+        }
+        .onAppear { text = DiagnosticsLog.shared.recentText() }
     }
 }

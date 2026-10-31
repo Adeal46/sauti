@@ -55,6 +55,7 @@ enum VoiceCatalog {
 
     /// English speakers of Kokoro v1.0. "Premium" are the voices Kokoro's authors grade highest.
     static let kokoro: [VoiceOption] = [
+        k(41, "Ridge", "Deep storyteller · Wolf original", .premium),
         k(3, "Heart", "American · warm, expressive", .premium),
         k(2, "Bella", "American · bright, clear", .premium),
         k(6, "Nicole", "American · soft, close", .premium),
@@ -82,7 +83,7 @@ enum VoiceCatalog {
         k(23, "Lily", "British · female", .standard, .gb),
         k(24, "Daniel", "British · male", .standard, .gb),
         k(25, "Fable", "British · male", .standard, .gb),
-        k(27, "Lewis", "British · male", .standard, .gb),
+        k(27, "Lewis", "British · deep narrator", .standard, .gb),
     ]
 
     static var premium: [VoiceOption] { kokoro.filter { $0.tier == .premium } }
